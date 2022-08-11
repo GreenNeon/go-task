@@ -1,10 +1,35 @@
 package models
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
 )
+
+type DeadlineDate time.Time
+
+// Implement Marshaler and Unmarshaler interface
+func (j *DeadlineDate) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return err
+	}
+	*j = DeadlineDate(t)
+	return nil
+}
+
+func (j DeadlineDate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Time(j))
+}
+
+// Maybe a Format function for printing your date
+func (j DeadlineDate) Format(s string) string {
+	t := time.Time(j)
+	return t.Format(s)
+}
 
 type Task struct {
 	Name        string    `gorm:"size:191;not null" json:"name"`

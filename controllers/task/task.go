@@ -13,16 +13,33 @@ import (
 // GET /tasks
 // Get all tasks
 func FindTasks(c *gin.Context) {
+	user_id, _ := token.ExtractTokenID(c)
 	var tasks []models.Task
-	models.DB.Preload("Assignee").Find(&tasks)
+	markQ := c.DefaultQuery("mark", "all")
+	userQ := c.DefaultQuery("user", "all")
+
+	tx := models.DB.Preload("Assignee")
+	if markQ == "done" {
+		tx = tx.Where("is_done = ?", true)
+	} else if markQ == "not_done" {
+		tx = tx.Where("is_done = ?", false)
+	}
+
+	if userQ == "other" {
+		tx = tx.Where("assignee_id <> ?", user_id)
+	} else if userQ == "self" {
+		tx = tx.Where("assignee_id = ?", user_id)
+	}
+
+	tx.Find(&tasks)
 
 	c.JSON(http.StatusOK, gin.H{"data": tasks})
 }
 
 type CreateTaskInput struct {
-	Name     string `json:"name" form:"name"`
-	Assignee int64  `json:"assignee_id" form:"assignee_id"`
-	Deadline string `json:"deadline" form:"deadline"`
+	Name     string    `json:"name" form:"name" binding:"required"`
+	Assignee int64     `json:"assignee_id" form:"assignee_id" binding:"required"`
+	Deadline time.Time `json:"deadline" form:"deadline" binding:"required"`
 }
 
 func CreateTask(c *gin.Context) {
@@ -35,15 +52,12 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	layout := "2006-01-02"
-	deadlineTime, err := time.Parse(layout, input.Deadline)
-
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	// Create task
-	task := models.Task{Name: input.Name, AssigneeID: input.Assignee, Deadline: deadlineTime,
+	task := models.Task{Name: input.Name, AssigneeID: input.Assignee, Deadline: input.Deadline,
 		CreatedByID: int64(user_id), IsDone: false}
 	models.DB.Create(&task)
 
@@ -78,7 +92,7 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	models.DB.Model(&task).Updates(input)
+	models.DB.Model(&task).Updates(map[string]interface{}{"name": input.Name, "assignee_id": input.Assignee, "deadline": input.Deadline})
 
 	c.JSON(http.StatusOK, gin.H{"message": "task updated successfuly ...", "data": task})
 }
